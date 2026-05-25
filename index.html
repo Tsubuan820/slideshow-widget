@@ -1,0 +1,906 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Slideshow</title>
+  <style>
+    /* ── Theme variables ── */
+    :root {
+      --bg-body:        #000;
+      --bg-panel:       #191919;
+      --bg-surface:     rgba(255,255,255,0.06);
+      --bg-surface-hover: rgba(255,255,255,0.11);
+      --text-primary:   #fff;
+      --text-secondary: rgba(255,255,255,0.5);
+      --text-placeholder: rgba(255,255,255,0.28);
+      --border:         rgba(255,255,255,0.11);
+      --border-focus:   rgba(255,255,255,0.3);
+      --handle:         rgba(255,255,255,0.18);
+      --overlay:        rgba(0,0,0,0.55);
+      --toggle-off:     rgba(255,255,255,0.15);
+      --toggle-on:      #fff;
+      --toggle-thumb-off: rgba(255,255,255,0.55);
+      --toggle-thumb-on:  #000;
+      --dropzone-border:  rgba(255,255,255,0.18);
+      --section-label:    rgba(255,255,255,0.32);
+      --drag-target:      rgba(255,255,255,0.7);
+      --empty-icon:       rgba(255,255,255,0.22);
+      --empty-text:       rgba(255,255,255,0.42);
+    }
+    html.light {
+      --bg-body:          #e8e8e8;
+      --bg-panel:         #fff;
+      --bg-surface:       rgba(0,0,0,0.04);
+      --bg-surface-hover: rgba(0,0,0,0.08);
+      --text-primary:     #111;
+      --text-secondary:   rgba(0,0,0,0.48);
+      --text-placeholder: rgba(0,0,0,0.28);
+      --border:           rgba(0,0,0,0.1);
+      --border-focus:     rgba(0,0,0,0.28);
+      --handle:           rgba(0,0,0,0.12);
+      --overlay:          rgba(0,0,0,0.28);
+      --toggle-off:       rgba(0,0,0,0.15);
+      --toggle-on:        #111;
+      --toggle-thumb-off: rgba(0,0,0,0.4);
+      --toggle-thumb-on:  #fff;
+      --dropzone-border:  rgba(0,0,0,0.14);
+      --section-label:    rgba(0,0,0,0.32);
+      --drag-target:      rgba(0,0,0,0.5);
+      --empty-icon:       rgba(0,0,0,0.18);
+      --empty-text:       rgba(0,0,0,0.4);
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: var(--bg-body);
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+
+    /* ── Slideshow ── */
+    #slideshow { position: relative; width: 100%; height: 100%; }
+
+    .slide {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      transition: opacity 1.2s ease-in-out;
+    }
+    .slide.active { opacity: 1; }
+    .slide img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .slide::after {
+      content: '';
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      height: 28%;
+      background: linear-gradient(transparent, rgba(0,0,0,0.45));
+      pointer-events: none;
+    }
+
+    /* Nav buttons */
+    .nav-btn {
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      z-index: 10;
+      background: rgba(255,255,255,0.12);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      border: 1px solid rgba(255,255,255,0.2);
+      color: #fff;
+      width: 44px; height: 44px;
+      border-radius: 50%;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      opacity: 0;
+      transition: opacity 0.3s, background 0.2s;
+    }
+    #slideshow:hover .nav-btn { opacity: 1; }
+    .nav-btn:hover { background: rgba(255,255,255,0.25); }
+    #prev { left: 16px; }
+    #next { right: 16px; }
+    .nav-btn svg { width: 18px; height: 18px; stroke: #fff; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+    /* Dots */
+    #dots {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex; gap: 8px;
+      z-index: 10;
+    }
+    .dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.4);
+      cursor: pointer;
+      transition: background 0.3s, transform 0.3s;
+    }
+    .dot.active { background: #fff; transform: scale(1.4); }
+
+    /* Edit button */
+    #edit-btn {
+      position: absolute;
+      bottom: 14px; right: 14px;
+      z-index: 20;
+      background: rgba(255,255,255,0.1);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      border: 1px solid rgba(255,255,255,0.18);
+      color: rgba(255,255,255,0.6);
+      width: 34px; height: 34px;
+      border-radius: 50%;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      opacity: 0;
+      transition: opacity 0.3s, color 0.2s, background 0.2s;
+    }
+    #slideshow:hover #edit-btn { opacity: 1; }
+    #edit-btn:hover { color: #fff; background: rgba(255,255,255,0.2); }
+
+    /* Empty state */
+    #empty-state {
+      position: absolute;
+      inset: 0;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: var(--empty-text);
+      gap: 14px;
+      font-size: 14px;
+    }
+    #empty-state svg { width: 52px; height: 52px; stroke: var(--empty-icon); fill: none; stroke-width: 1.5; }
+    #empty-state p { line-height: 1.7; text-align: center; }
+    #empty-btn {
+      margin-top: 4px;
+      padding: 9px 22px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      border-radius: 20px;
+      cursor: pointer;
+      font-size: 13px;
+      transition: background 0.2s;
+    }
+    #empty-btn:hover { background: var(--bg-surface-hover); }
+
+    /* ── Edit Panel ── */
+    #edit-panel {
+      position: fixed;
+      inset: 0;
+      z-index: 100;
+      display: flex;
+      align-items: flex-end;
+      background: var(--overlay);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.28s;
+    }
+    #edit-panel.open { opacity: 1; pointer-events: all; }
+
+    #panel-inner {
+      width: 100%;
+      max-height: 82vh;
+      background: var(--bg-panel);
+      border-radius: 18px 18px 0 0;
+      padding: 20px 20px 32px;
+      overflow-y: auto;
+      transform: translateY(100%);
+      transition: transform 0.36s cubic-bezier(0.32, 0.72, 0, 1);
+    }
+    #edit-panel.open #panel-inner { transform: translateY(0); }
+
+    #drag-handle {
+      width: 36px; height: 4px;
+      background: var(--handle);
+      border-radius: 2px;
+      margin: 0 auto 18px;
+    }
+
+    #panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+    #panel-header h2 { color: var(--text-primary); font-size: 15px; font-weight: 600; }
+    #close-btn {
+      background: var(--bg-surface);
+      border: none;
+      color: var(--text-secondary);
+      width: 28px; height: 28px;
+      border-radius: 50%;
+      cursor: pointer;
+      font-size: 13px;
+      display: flex; align-items: center; justify-content: center;
+      transition: background 0.2s, color 0.2s;
+    }
+    #close-btn:hover { background: var(--bg-surface-hover); color: var(--text-primary); }
+
+    /* Drop zone */
+    #dropzone {
+      border: 1.5px dashed var(--dropzone-border);
+      border-radius: 12px;
+      padding: 22px 16px;
+      text-align: center;
+      color: var(--text-secondary);
+      font-size: 13px;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s, color 0.2s;
+      margin-bottom: 12px;
+    }
+    #dropzone:hover, #dropzone.drag-over {
+      border-color: var(--border-focus);
+      background: var(--bg-surface);
+    }
+    #dropzone svg { width: 26px; height: 26px; stroke: currentColor; fill: none; stroke-width: 1.5; margin-bottom: 7px; }
+    #dropzone .hint { margin-top: 3px; font-size: 11px; opacity: 0.6; }
+
+    /* URL row */
+    #url-row { display: flex; gap: 8px; margin-bottom: 12px; }
+    #url-input {
+      flex: 1;
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 9px 13px;
+      color: var(--text-primary);
+      font-size: 13px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    #url-input::placeholder { color: var(--text-placeholder); }
+    #url-input:focus { border-color: var(--border-focus); }
+    #add-url-btn {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      color: var(--text-secondary);
+      border-radius: 8px;
+      padding: 9px 15px;
+      cursor: pointer;
+      font-size: 13px;
+      white-space: nowrap;
+      transition: background 0.2s, color 0.2s;
+    }
+    #add-url-btn:hover { background: var(--bg-surface-hover); color: var(--text-primary); }
+
+    /* Settings block — compact single card */
+    #settings-block {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+      margin-bottom: 16px;
+    }
+    .setting-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 14px;
+    }
+    .setting-row + .setting-row { border-top: 1px solid var(--border); }
+    .setting-label {
+      color: var(--text-secondary);
+      font-size: 12px;
+      white-space: nowrap;
+      min-width: 72px;
+    }
+    #interval-slider {
+      flex: 1;
+      -webkit-appearance: none;
+      height: 3px;
+      border-radius: 2px;
+      background: var(--border);
+      outline: none;
+      cursor: pointer;
+    }
+    #interval-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 15px; height: 15px;
+      border-radius: 50%;
+      background: var(--text-primary);
+      cursor: pointer;
+    }
+    #interval-value {
+      color: var(--text-primary);
+      font-size: 12px;
+      font-weight: 500;
+      min-width: 26px;
+      text-align: right;
+    }
+
+    #theme-btn {
+      background: var(--bg-surface);
+      border: none;
+      color: var(--text-secondary);
+      width: 28px; height: 28px;
+      border-radius: 50%;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: background 0.2s, color 0.2s;
+    }
+    #theme-btn:hover { background: var(--bg-surface-hover); color: var(--text-primary); }
+
+    /* Toggle */
+    .toggle {
+      position: relative;
+      width: 36px; height: 20px;
+      flex-shrink: 0;
+      margin-left: auto;
+    }
+    .toggle input { display: none; }
+    .toggle-track {
+      position: absolute;
+      inset: 0;
+      border-radius: 10px;
+      background: var(--toggle-off);
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .toggle input:checked + .toggle-track { background: var(--toggle-on); }
+    .toggle-thumb {
+      position: absolute;
+      top: 3px; left: 3px;
+      width: 14px; height: 14px;
+      border-radius: 50%;
+      background: var(--toggle-thumb-off);
+      pointer-events: none;
+      transition: transform 0.2s, background 0.2s;
+    }
+    .toggle input:checked ~ .toggle-thumb {
+      transform: translateX(16px);
+      background: var(--toggle-thumb-on);
+    }
+
+    /* Section label */
+    .section-label {
+      color: var(--section-label);
+      font-size: 11px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+
+    /* Thumbnail grid */
+    #thumb-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+      gap: 8px;
+      margin-bottom: 14px;
+      position: relative;
+    }
+    .thumb-item {
+      position: relative;
+      aspect-ratio: 1;
+      border-radius: 8px;
+      overflow: hidden;
+      cursor: grab;
+      transition: transform 0.15s;
+    }
+    .thumb-item:active { cursor: grabbing; }
+    .thumb-item.dragging { opacity: 0.35; transform: scale(0.95); }
+
+    /* 差し込みインジケーター：絶対配置でグリッドの流れに影響しない */
+    #drop-indicator {
+      position: absolute;
+      width: 3px;
+      background: var(--text-primary);
+      border-radius: 2px;
+      pointer-events: none;
+      display: none;
+      z-index: 10;
+      transition: left 0.12s ease, top 0.12s ease, height 0.12s ease;
+    }
+
+    /* object-fit: contain モード */
+    #slideshow.mode-contain .slide { background: #000; }
+    #slideshow.mode-contain .slide img { object-fit: contain; position: relative; z-index: 1; }
+
+    /* ぼかし背景 */
+    .slide-bg {
+      position: absolute;
+      inset: -40px; /* ぼかしの端が見えないよう少しはみ出す */
+      background-size: cover;
+      background-position: center;
+      filter: blur(28px) brightness(0.55) saturate(1.3);
+      opacity: 0;
+      transition: opacity 0.5s;
+      z-index: 0;
+    }
+    #slideshow.mode-contain .slide-bg { opacity: 1; }
+    .thumb-item { user-select: none; }
+    .thumb-item img { width: 100%; height: 100%; object-fit: cover; pointer-events: none; display: block; user-select: none; }
+    .thumb-remove {
+      position: absolute;
+      top: 5px; right: 5px;
+      background: rgba(0,0,0,0.65);
+      border: none;
+      color: #fff;
+      width: 22px; height: 22px;
+      border-radius: 50%;
+      cursor: pointer;
+      font-size: 11px;
+      display: flex; align-items: center; justify-content: center;
+      opacity: 0;
+      transition: opacity 0.18s;
+    }
+    .thumb-item:hover .thumb-remove { opacity: 1; }
+
+    #hidden-file { display: none; }
+  </style>
+</head>
+<body>
+
+<div id="slideshow">
+  <div id="slides"></div>
+
+  <div id="empty-state">
+    <svg viewBox="0 0 24 24">
+      <rect x="3" y="3" width="18" height="18" rx="2"/>
+      <circle cx="8.5" cy="8.5" r="1.5"/>
+      <polyline points="21 15 16 10 5 21"/>
+    </svg>
+    <p>写真がまだありません<br>右下のボタンから追加してください</p>
+    <button id="empty-btn">写真を追加する</button>
+  </div>
+
+  <button class="nav-btn" id="prev">
+    <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
+  </button>
+  <button class="nav-btn" id="next">
+    <svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
+  </button>
+
+  <div id="dots"></div>
+
+  <button id="edit-btn" title="写真を管理">
+    <svg viewBox="0 0 24 24" width="15" height="15" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="3"/>
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+    </svg>
+  </button>
+</div>
+
+<!-- Edit Panel -->
+<div id="edit-panel">
+  <div id="panel-inner">
+    <div id="drag-handle"></div>
+    <div id="panel-header">
+      <h2>写真を管理</h2>
+      <div style="display:flex;gap:6px">
+        <button id="theme-btn" title="テーマ切り替え">
+          <svg id="icon-moon" viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+          <svg id="icon-sun" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="display:none"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+        </button>
+        <button id="close-btn">✕</button>
+      </div>
+    </div>
+
+    <div class="section-label" id="photos-label" style="display:none">追加済みの写真（ドラッグで並び替え）</div>
+    <div id="thumb-grid"></div>
+
+    <div id="dropzone">
+      <svg viewBox="0 0 24 24">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+        <polyline points="17 8 12 3 7 8"/>
+        <line x1="12" y1="3" x2="12" y2="15"/>
+      </svg>
+      <div>写真をドラッグ&amp;ドロップ</div>
+      <div class="hint">またはクリックしてファイルを選択</div>
+    </div>
+    <input type="file" id="hidden-file" accept="image/*" multiple>
+
+    <div id="url-row">
+      <input type="url" id="url-input" placeholder="画像のURLを貼り付けて追加">
+      <button id="add-url-btn">追加</button>
+    </div>
+
+    <div id="settings-block">
+      <div class="setting-row">
+        <span class="setting-label">自動再生</span>
+        <label class="toggle">
+          <input type="checkbox" id="autoplay-toggle" checked>
+          <div class="toggle-track"></div>
+          <div class="toggle-thumb"></div>
+        </label>
+      </div>
+      <div class="setting-row" id="interval-row">
+        <span class="setting-label">切り替え間隔</span>
+        <input type="range" id="interval-slider" min="1" max="15" step="1" value="4">
+        <span id="interval-value">5秒</span>
+      </div>
+      <div class="setting-row">
+        <span class="setting-label">全体を表示</span>
+        <label class="toggle">
+          <input type="checkbox" id="fit-toggle">
+          <div class="toggle-track"></div>
+          <div class="toggle-thumb"></div>
+        </label>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ── Theme ──
+  const LS_THEME = 'slideshow-theme';
+  let currentTheme = localStorage.getItem(LS_THEME) || 'light';
+  function applyTheme(theme) {
+    currentTheme = theme;
+    document.documentElement.classList.toggle('light', theme === 'light');
+    document.getElementById('icon-moon').style.display = theme === 'light' ? '' : 'none';
+    document.getElementById('icon-sun').style.display  = theme === 'light' ? 'none' : '';
+    localStorage.setItem(LS_THEME, theme);
+  }
+  document.getElementById('theme-btn').addEventListener('click', () => {
+    applyTheme(currentTheme === 'dark' ? 'light' : 'dark');
+  });
+  applyTheme(currentTheme);
+
+  const DB_NAME      = 'slideshow-db';
+  const DB_STORE     = 'images';
+  const LS_KEY       = 'slideshow-order';
+  const LS_INTERVAL  = 'slideshow-interval';
+  const LS_AUTOPLAY  = 'slideshow-autoplay';
+
+  let db;
+  let imageOrder = [];
+  let current    = 0;
+  let timer      = null;
+  let blobURLs   = {};
+  let intervalSec = parseInt(localStorage.getItem(LS_INTERVAL) || '5', 10);
+  let autoplay    = localStorage.getItem(LS_AUTOPLAY) !== 'false';
+
+  // ── IndexedDB ──
+  function openDB() {
+    return new Promise((res, rej) => {
+      const req = indexedDB.open(DB_NAME, 1);
+      req.onupgradeneeded = e => e.target.result.createObjectStore(DB_STORE);
+      req.onsuccess = e => res(e.target.result);
+      req.onerror   = rej;
+    });
+  }
+  function dbPut(id, blob) {
+    return new Promise((res, rej) => {
+      const tx = db.transaction(DB_STORE, 'readwrite');
+      tx.objectStore(DB_STORE).put(blob, id);
+      tx.oncomplete = res; tx.onerror = rej;
+    });
+  }
+  function dbGet(id) {
+    return new Promise((res, rej) => {
+      const tx  = db.transaction(DB_STORE, 'readonly');
+      const req = tx.objectStore(DB_STORE).get(id);
+      req.onsuccess = () => res(req.result); req.onerror = rej;
+    });
+  }
+  function dbDel(id) {
+    return new Promise((res, rej) => {
+      const tx = db.transaction(DB_STORE, 'readwrite');
+      tx.objectStore(DB_STORE).delete(id);
+      tx.oncomplete = res; tx.onerror = rej;
+    });
+  }
+
+  function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2); }
+  function saveOrder() { localStorage.setItem(LS_KEY, JSON.stringify(imageOrder)); }
+  function loadOrder() { try { return JSON.parse(localStorage.getItem(LS_KEY)) || []; } catch { return []; } }
+
+  // ── Slideshow ──
+  const slidesEl = document.getElementById('slides');
+  const dotsEl   = document.getElementById('dots');
+  const emptyEl  = document.getElementById('empty-state');
+
+  async function getSrc(item) {
+    if (item.type === 'url') return item.value;
+    if (blobURLs[item.id]) return blobURLs[item.id];
+    const blob = await dbGet(item.id);
+    if (!blob) return null;
+    const url = URL.createObjectURL(blob);
+    blobURLs[item.id] = url;
+    return url;
+  }
+
+  async function buildSlideshow() {
+    clearInterval(timer);
+    slidesEl.innerHTML = '';
+    dotsEl.innerHTML   = '';
+
+    if (!imageOrder.length) {
+      emptyEl.style.display = 'flex';
+      return;
+    }
+    emptyEl.style.display = 'none';
+
+    const srcs = await Promise.all(imageOrder.map(getSrc));
+    let slideIdx = 0;
+
+    srcs.forEach((src, i) => {
+      if (!src) return;
+      const slide = document.createElement('div');
+      slide.className = 'slide' + (slideIdx === 0 ? ' active' : '');
+
+      const bg = document.createElement('div');
+      bg.className = 'slide-bg';
+      bg.style.backgroundImage = `url('${src}')`;
+      slide.appendChild(bg);
+
+      const img = document.createElement('img');
+      img.src = src; img.alt = ''; img.draggable = false;
+      slide.appendChild(img);
+      slidesEl.appendChild(slide);
+
+      const dot = document.createElement('div');
+      dot.className = 'dot' + (slideIdx === 0 ? ' active' : '');
+      const capturedIdx = slideIdx;
+      dot.addEventListener('click', () => goTo(capturedIdx));
+      dotsEl.appendChild(dot);
+      slideIdx++;
+    });
+
+    current = 0;
+    if (autoplay && slideIdx > 1) timer = setInterval(() => goTo(current + 1), intervalSec * 1000);
+  }
+
+  function goTo(index) {
+    const ss = document.querySelectorAll('.slide');
+    const dd = document.querySelectorAll('.dot');
+    if (!ss.length) return;
+    ss[current]?.classList.remove('active');
+    dd[current]?.classList.remove('active');
+    current = ((index % ss.length) + ss.length) % ss.length;
+    ss[current]?.classList.add('active');
+    dd[current]?.classList.add('active');
+  }
+
+  function restartTimer() {
+    clearInterval(timer);
+    const ss = document.querySelectorAll('.slide');
+    if (autoplay && ss.length > 1) timer = setInterval(() => goTo(current + 1), intervalSec * 1000);
+  }
+
+  document.getElementById('prev').addEventListener('click', () => { goTo(current - 1); restartTimer(); });
+  document.getElementById('next').addEventListener('click', () => { goTo(current + 1); restartTimer(); });
+
+  document.addEventListener('keydown', e => {
+    if (document.getElementById('edit-panel').classList.contains('open')) return;
+    if (e.key === 'ArrowRight') { goTo(current + 1); restartTimer(); }
+    if (e.key === 'ArrowLeft')  { goTo(current - 1); restartTimer(); }
+  });
+
+  // ── Edit panel ──
+  const editPanel  = document.getElementById('edit-panel');
+  const thumbGrid  = document.getElementById('thumb-grid');
+  const photosLabel = document.getElementById('photos-label');
+
+  function openEdit() { editPanel.classList.add('open'); renderThumbs(); }
+  function closeEdit() { editPanel.classList.remove('open'); buildSlideshow(); }
+
+  document.getElementById('edit-btn').addEventListener('click', openEdit);
+  document.getElementById('empty-btn').addEventListener('click', openEdit);
+  document.getElementById('close-btn').addEventListener('click', closeEdit);
+  editPanel.addEventListener('click', e => { if (e.target === editPanel) closeEdit(); });
+
+  // 差し込みインジケーター（絶対配置、グリッドの流れに影響しない）
+  const dropIndicator = document.createElement('div');
+  dropIndicator.id = 'drop-indicator';
+  thumbGrid.appendChild(dropIndicator);
+
+  let dragAfter    = false;
+  let dragTargetId = null;
+
+  function showIndicator(targetDiv) {
+    const tRect = targetDiv.getBoundingClientRect();
+    const gRect = thumbGrid.getBoundingClientRect();
+    dropIndicator.style.display = 'block';
+    dropIndicator.style.top    = (tRect.top  - gRect.top)  + 'px';
+    dropIndicator.style.height =  tRect.height + 'px';
+    dropIndicator.style.left   = dragAfter
+      ? (tRect.right - gRect.left + 3) + 'px'
+      : (tRect.left  - gRect.left - 6) + 'px';
+  }
+  function removeIndicator() { dropIndicator.style.display = 'none'; }
+
+  thumbGrid.addEventListener('dragleave', e => {
+    if (!thumbGrid.contains(e.relatedTarget)) {
+      removeIndicator();
+      dragTargetId = null;
+    }
+  });
+
+  // drop はグリッド全体で受け取る（個別サムネイルでは発火しないことがあるため）
+  thumbGrid.addEventListener('dragover', e => e.preventDefault());
+  thumbGrid.addEventListener('drop', e => {
+    e.preventDefault();
+    removeIndicator();
+    if (!dragTargetId) return;
+    const fromId = e.dataTransfer.getData('text/plain');
+    if (!fromId || fromId === dragTargetId) return;
+    const fi = imageOrder.findIndex(x => x.id === fromId);
+    if (fi === -1) return;
+    const [moved] = imageOrder.splice(fi, 1);
+    const ti = imageOrder.findIndex(x => x.id === dragTargetId);
+    if (ti === -1) { imageOrder.splice(fi, 0, moved); return; }
+    imageOrder.splice(dragAfter ? ti + 1 : ti, 0, moved);
+    dragTargetId = null;
+    saveOrder();
+    renderThumbs();
+  });
+
+  async function renderThumbs() {
+    // FLIP: 並び替え前の各サムネイルの位置を記録
+    const oldRects = {};
+    thumbGrid.querySelectorAll('.thumb-item').forEach(el => {
+      oldRects[el.dataset.id] = el.getBoundingClientRect();
+    });
+
+    removeIndicator();
+    thumbGrid.innerHTML = '';
+    thumbGrid.appendChild(dropIndicator); // 常にグリッド内に保持
+    photosLabel.style.display = imageOrder.length ? '' : 'none';
+
+    for (const item of imageOrder) {
+      const src = await getSrc(item);
+      if (!src) continue;
+
+      const div = document.createElement('div');
+      div.className = 'thumb-item';
+      div.dataset.id = item.id;
+      div.draggable = true;
+
+      const img = document.createElement('img');
+      img.src = src; img.alt = '';
+      img.draggable = false;
+      img.addEventListener('dragstart', e => e.preventDefault()); // ブラウザの画像ドラッグを完全に抑制
+      div.appendChild(img);
+
+      const btn = document.createElement('button');
+      btn.className = 'thumb-remove';
+      btn.textContent = '✕';
+      btn.addEventListener('click', async e => {
+        e.stopPropagation();
+        if (item.type === 'blob') await dbDel(item.id);
+        imageOrder = imageOrder.filter(x => x.id !== item.id);
+        saveOrder();
+        renderThumbs();
+      });
+      div.appendChild(btn);
+
+      // Drag-to-reorder
+      div.addEventListener('dragstart', e => {
+        e.dataTransfer.setData('text/plain', item.id);
+        setTimeout(() => div.classList.add('dragging'), 0);
+      });
+      div.addEventListener('dragend', () => {
+        div.classList.remove('dragging');
+        removeIndicator();
+      });
+      div.addEventListener('dragover', e => {
+        e.preventDefault();
+        dragTargetId = item.id;
+        const rect = div.getBoundingClientRect();
+        dragAfter = e.clientX > rect.left + rect.width / 2;
+        showIndicator(div);
+      });
+
+      thumbGrid.appendChild(div);
+    }
+
+    // FLIP: 新しい位置に移動した要素をアニメーション
+    requestAnimationFrame(() => {
+      thumbGrid.querySelectorAll('.thumb-item').forEach(el => {
+        const old = oldRects[el.dataset.id];
+        if (!old) return; // 新規追加要素はスキップ
+        const cur = el.getBoundingClientRect();
+        const dx = old.left - cur.left;
+        const dy = old.top  - cur.top;
+        if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return;
+        el.style.transition = 'none';
+        el.style.transform  = `translate(${dx}px, ${dy}px)`;
+        requestAnimationFrame(() => {
+          el.style.transition = 'transform 0.22s ease';
+          el.style.transform  = '';
+        });
+      });
+    });
+  }
+
+  // ── File upload ──
+  const dropzone   = document.getElementById('dropzone');
+  const hiddenFile = document.getElementById('hidden-file');
+
+  dropzone.addEventListener('click', () => hiddenFile.click());
+  dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('drag-over'); });
+  dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag-over'));
+  dropzone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropzone.classList.remove('drag-over');
+    handleFiles(e.dataTransfer.files);
+  });
+  hiddenFile.addEventListener('change', e => { handleFiles(e.target.files); e.target.value = ''; });
+
+  async function handleFiles(files) {
+    for (const file of files) {
+      if (!file.type.startsWith('image/')) continue;
+      const id = uid();
+      await dbPut(id, file);
+      imageOrder.push({ id, type: 'blob' });
+    }
+    saveOrder();
+    renderThumbs();
+  }
+
+  // ── URL input ──
+  const urlInput  = document.getElementById('url-input');
+  const addUrlBtn = document.getElementById('add-url-btn');
+
+  function addUrl() {
+    const val = urlInput.value.trim();
+    if (!val) return;
+    imageOrder.push({ id: uid(), type: 'url', value: val });
+    saveOrder();
+    urlInput.value = '';
+    renderThumbs();
+  }
+
+  addUrlBtn.addEventListener('click', addUrl);
+  urlInput.addEventListener('keydown', e => { if (e.key === 'Enter') addUrl(); });
+
+  // ── Object-fit ──
+  const LS_FIT = 'slideshow-fit';
+  const slideshowEl = document.getElementById('slideshow');
+  function applyFit(mode) {
+    slideshowEl.classList.toggle('mode-contain', mode === 'contain');
+    document.getElementById('fit-toggle').checked = (mode === 'contain');
+    localStorage.setItem(LS_FIT, mode);
+  }
+  document.getElementById('fit-toggle').addEventListener('change', e => {
+    applyFit(e.target.checked ? 'contain' : 'cover');
+  });
+  applyFit(localStorage.getItem(LS_FIT) || 'cover');
+
+  // ── Settings controls ──
+  const slider       = document.getElementById('interval-slider');
+  const intervalVal  = document.getElementById('interval-value');
+  const autoplayTgl  = document.getElementById('autoplay-toggle');
+  const intervalRow  = document.getElementById('interval-row');
+
+  function initControls() {
+    slider.value = intervalSec;
+    intervalVal.textContent = intervalSec + '秒';
+    autoplayTgl.checked = autoplay;
+    intervalRow.style.opacity = autoplay ? '1' : '0.35';
+    intervalRow.style.pointerEvents = autoplay ? '' : 'none';
+  }
+
+  slider.addEventListener('input', () => {
+    intervalSec = parseInt(slider.value, 10);
+    intervalVal.textContent = intervalSec + '秒';
+    localStorage.setItem(LS_INTERVAL, intervalSec);
+  });
+
+  autoplayTgl.addEventListener('change', () => {
+    autoplay = autoplayTgl.checked;
+    localStorage.setItem(LS_AUTOPLAY, autoplay);
+    intervalRow.style.opacity = autoplay ? '1' : '0.35';
+    intervalRow.style.pointerEvents = autoplay ? '' : 'none';
+  });
+
+  // ── Init ──
+  (async () => {
+    db = await openDB();
+    imageOrder = loadOrder();
+    initControls();
+    await buildSlideshow();
+  })();
+</script>
+
+</body>
+</html>
